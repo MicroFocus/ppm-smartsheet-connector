@@ -43,7 +43,7 @@ public class SmartsheetIntegrationConnector extends IntegrationConnector {
 
     @Override
     public String getConnectorVersion() {
-        return "0.1";
+        return "0.2";
     }
 
     @Override
