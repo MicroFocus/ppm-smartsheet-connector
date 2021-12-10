@@ -25,6 +25,8 @@ public class RowExternalTask extends ExternalTask {
     private Map<String, SmartsheetSheet.SmartsheetRow.SmartsheetCell> cellsByColumnId = new HashMap<>();
     private double percentComplete = 0.0d;
     private double actualEffort = 0.0d;
+    private double scheduledEffort = 0.0d;
+    private double estimatedRemainingEffort = 0.0d;
     private List<Long> resourcesIds = new ArrayList<>();
     private List<ExternalTask> children = new ArrayList<>();
 
@@ -50,9 +52,34 @@ public class RowExternalTask extends ExternalTask {
 
         String actualEffortField = config.get(SmartsheetConstants.KEY_TMF_TASK_ACTUAL_EFFORT);
         if (actualEffortField != null) {
-            Double effortValue = getNumberField(actualEffortField);
-            if (effortValue != null) {
-                actualEffort = effortValue.doubleValue();
+            Double actualEffortValue = getNumberField(actualEffortField);
+            if (actualEffortValue != null) {
+                actualEffort = actualEffortValue.doubleValue();
+                if (actualEffort < 0d) {
+                    actualEffort = 0d;
+                }
+            }
+        }
+
+        String scheduledEffortField = config.get(SmartsheetConstants.KEY_TMF_TASK_SCHEDULED_EFFORT);
+        if (scheduledEffortField != null) {
+            Double scheduledEffortValue = getNumberField(scheduledEffortField);
+            if (scheduledEffortValue != null) {
+                scheduledEffort = scheduledEffortValue.doubleValue();
+                if (scheduledEffort < 0d) {
+                    scheduledEffort = 0d;
+                }
+            }
+        }
+
+        String ereField = config.get(SmartsheetConstants.KEY_TMF_TASK_ERE);
+        if (ereField != null) {
+            Double ereValue = getNumberField(ereField);
+            if (ereValue != null) {
+                estimatedRemainingEffort = ereValue.doubleValue();
+                if (estimatedRemainingEffort < 0d) {
+                    estimatedRemainingEffort = 0d;
+                }
             }
         }
 
@@ -60,7 +87,7 @@ public class RowExternalTask extends ExternalTask {
         if (percentCompleteField != null) {
             Double percentValue = getPercentField(percentCompleteField);
             if (percentValue != null) {
-                percentComplete = percentValue * 100d; // PPM needs value between 0 and 100, while Smartsheet stores percent in real value.
+                percentComplete = percentValue; // Percent value should be written in 0-100 value in smartsheet.
 
                 if (percentComplete < 0) {
                     percentComplete = 0d;
@@ -71,11 +98,76 @@ public class RowExternalTask extends ExternalTask {
             }
         }
 
+        computeMissingEffortFields();
+
+    }
+
+
+    /**
+     * Exactly 2 from the above fields should be mapped/set - and PPM will compute the other fields based on the formulas:
+     * SE = AE + ERE
+     * PC = AE/SE
+     * If more than 2 fields were set, we will arbitrarily adjust values to ensure that above formulas do apply.
+     */
+    private void computeMissingEffortFields() {
+
+        if (actualEffort == 0d && scheduledEffort == 0d && percentComplete == 0d && estimatedRemainingEffort == 0d) {
+            // This is a task with zero actual info - that's a valid set of values!
+            return;
+        }
+
+        // We compute AE first
+        if (actualEffort == 0d) {
+            if (scheduledEffort != 0d) {
+                if (estimatedRemainingEffort != 0d) {
+                    // AE = SE - ERE
+                    actualEffort = scheduledEffort - estimatedRemainingEffort;
+                }
+
+                if (percentComplete != 0d) {
+                    // AE = SE * PC
+                    actualEffort = scheduledEffort * (percentComplete / 100d);
+                }
+            }
+
+            if (estimatedRemainingEffort != 0d && percentComplete != 0d) {
+                // AE = ERE * PC / (1-PC)
+                actualEffort = estimatedRemainingEffort * (percentComplete / 100d) / (1d - (percentComplete / 100d));
+            }
+        }
+
+        // We then compute Scheduled Effort
+        if (scheduledEffort == 0d) {
+            if (estimatedRemainingEffort != 0d) {
+                // SE = AE + ERE
+                scheduledEffort = actualEffort + estimatedRemainingEffort;
+
+            } else if (percentComplete != 0d) {
+                // SE = AE / PC
+                scheduledEffort = actualEffort / (percentComplete / 100d);
+            }
+        }
+
+        // Then Estimated Remaining Effort
+        if (estimatedRemainingEffort == 0d) {
+            // ERE = SE - AE
+            estimatedRemainingEffort = scheduledEffort - actualEffort;
+        }
+
+        // We (re)compute percent complete at last to ensure the formula is valid before PPM enforces it.
+        if (actualEffort == 0d || scheduledEffort == 0d) {
+            percentComplete = 0d;
+        } else {
+            percentComplete = actualEffort / scheduledEffort * 100d;
+        }
+
         if (actualEffort > 0d && percentComplete <= 0d) {
+            // Task with actual effort must be in progress and thus cannot have percent complete = 0%.
             percentComplete = 1d;
         }
 
         if (actualEffort <= 0d && percentComplete > 0d) {
+            // Tasks that have been started must have some actual effort entered.
             actualEffort = 1d;
         }
     }
@@ -147,12 +239,12 @@ public class RowExternalTask extends ExternalTask {
 
         if (resourcesIds.isEmpty()) {
             // All is unassigned effort
-            ExternalTaskActuals unassignedActuals = new SmartsheetExternalTaskActuals(actualEffort, percentComplete, getScheduledStart(), getScheduledFinish(), null);
+            ExternalTaskActuals unassignedActuals = new SmartsheetExternalTaskActuals(scheduledEffort, estimatedRemainingEffort, actualEffort, percentComplete, getScheduledStart(), getScheduledFinish(), null);
             actuals.add(unassignedActuals);
         } else {
             // One Actual entry per resource.
             for (final Long resourceId : resourcesIds) {
-                ExternalTaskActuals resourceActuals = new SmartsheetExternalTaskActuals(actualEffort / numResources, percentComplete, getScheduledStart(), getScheduledFinish(), resourceId);
+                ExternalTaskActuals resourceActuals = new SmartsheetExternalTaskActuals(scheduledEffort/ numResources, estimatedRemainingEffort/ numResources,actualEffort / numResources, percentComplete, getScheduledStart(), getScheduledFinish(), resourceId);
                 actuals.add(resourceActuals);
             }
         }
@@ -160,7 +252,9 @@ public class RowExternalTask extends ExternalTask {
         return actuals;
     }
 
-    /** Only for summary tasks */
+    /**
+     * Only for summary tasks
+     */
     @Override
     public long getOwnerId() {
         if (resourcesIds == null || resourcesIds.isEmpty()) {
@@ -211,7 +305,7 @@ public class RowExternalTask extends ExternalTask {
         try {
             return Double.parseDouble(prop.value);
         } catch (Exception e) {
-            logger.error("Error parsing field value to a number:"+prop.value, e);
+            logger.error("Error parsing field value to a number:" + prop.value, e);
             return null;
         }
     }
@@ -223,20 +317,18 @@ public class RowExternalTask extends ExternalTask {
             return null;
         }
 
-        String strValue = prop.value.trim();
+        // We check display value because a display value of 25% has a stored  value of 0.25
+        String strValue = prop.displayValue.trim();
 
-         boolean isPercent = false;
-
-         if (strValue.endsWith("%")) {
-             isPercent = true;
-             strValue = StringUtils.removeEnd(strValue, "%").trim();
-         }
+        if (strValue.endsWith("%")) {
+            strValue = StringUtils.removeEnd(strValue, "%").trim();
+        }
 
         try {
             double value = Double.parseDouble(strValue);
-            return (isPercent ? value  / 100d : value);
+            return value;
         } catch (Exception e) {
-            logger.error("Error parsing field value to a Percentage: "+prop.value, e);
+            logger.error("Error parsing field value to a Percentage: " + prop.value, e);
             return null;
         }
     }

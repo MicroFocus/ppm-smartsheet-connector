@@ -9,13 +9,17 @@ import java.util.Date;
  */
 public class SmartsheetExternalTaskActuals extends ExternalTaskActuals {
 
+    private double scheduledEffort;
+    private double estimatedRemainingEffort;
     private double actualEffort;
     private double percentComplete;
     private long resourceId;
     private Date scheduledStart;
     private Date scheduledFinish;
 
-    public SmartsheetExternalTaskActuals(double actualEffort, double percentComplete, Date scheduledStart, Date scheduledFinish, Long resourceId) {
+    public SmartsheetExternalTaskActuals(double scheduledEffort, double estimatedRemainingEffort, double actualEffort, double percentComplete, Date scheduledStart, Date scheduledFinish, Long resourceId) {
+        this.scheduledEffort = scheduledEffort;
+        this.estimatedRemainingEffort = estimatedRemainingEffort;
         this.actualEffort = actualEffort;
         this.percentComplete = percentComplete;
         this.resourceId = resourceId == null ? -1 : resourceId.longValue();
@@ -25,7 +29,7 @@ public class SmartsheetExternalTaskActuals extends ExternalTaskActuals {
 
     @Override
     public double getScheduledEffort() {
-        return actualEffort + getEstimatedRemainingEffort();
+        return scheduledEffort;
     }
 
     @Override
@@ -63,11 +67,6 @@ public class SmartsheetExternalTaskActuals extends ExternalTaskActuals {
 
     @Override
     public Double getEstimatedRemainingEffort() {
-        // PPM enforces that PC = AE / (AE + ERE), so we have to compute ERE accordingly otherwise it will modify PC.
-        if (percentComplete <= 0) {
-            return actualEffort;
-        } else {
-            return actualEffort * (100 - percentComplete) / percentComplete;
-        }
+        return estimatedRemainingEffort;
     }
 }

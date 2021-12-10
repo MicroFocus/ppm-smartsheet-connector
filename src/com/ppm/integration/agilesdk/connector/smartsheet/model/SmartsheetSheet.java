@@ -7,9 +7,12 @@ import com.ppm.integration.agilesdk.provider.UserProvider;
 import org.apache.commons.lang.StringUtils;
 
 import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
@@ -22,6 +25,8 @@ public class SmartsheetSheet extends SmartsheetObject {
 
     // yyyy-MM-dd date
     private final static SimpleDateFormat shortDateFormat = new SimpleDateFormat("yyyy-MM-dd");
+
+    private final static SimpleDateFormat localDateTimeFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
 
     private final static DateTimeFormatter longDateTimeFormatter = new DateTimeFormatterBuilder()
             // date/time
@@ -38,6 +43,11 @@ public class SmartsheetSheet extends SmartsheetObject {
 
     public String accessLevel;
     public String permalink;
+    public String path; // Workspace / Folder hierarchy this sheet is sitting in, or "Home" if available in home.
+
+    public String getFullName() {
+        return path == null ? name : (path + name);
+    }
 
     public SmartsheetColumn[] columns;
 
@@ -76,8 +86,13 @@ public class SmartsheetSheet extends SmartsheetObject {
 
                 try {
                     if (dateStr.contains("T")) {
-                        ZonedDateTime date = ZonedDateTime.parse(dateStr, longDateTimeFormatter);
-                        return Date.from(date.toInstant());
+                        try {
+                            ZonedDateTime date = ZonedDateTime.parse(dateStr, longDateTimeFormatter);
+                            return Date.from(date.toInstant());
+                        } catch (DateTimeParseException de) {
+                            // ABSTRACT_DATETIME field types have format YYYY-MM-ddTHH:mm:ss without any timezone info.
+                            return localDateTimeFormat.parse(dateStr);
+                        }
                     } else {
                         // Format yyyy-MM-dd
                         return shortDateFormat.parse(dateStr);

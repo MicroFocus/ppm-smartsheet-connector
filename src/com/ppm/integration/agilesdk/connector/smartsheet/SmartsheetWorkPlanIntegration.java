@@ -65,10 +65,14 @@ public class SmartsheetWorkPlanIntegration extends WorkPlanIntegration {
 
                 @Override
                 public List<Option> getDynamicalOptions(ValueSet values) {
-                    final List<SmartsheetSheet> sheets = getService(values).getAllAvailableSheets();
-                    Collections.sort(sheets, (o1, o2) -> o1.name.compareToIgnoreCase(o2.name));
+
+                    String sheetRestriction = values.get(SmartsheetConstants.KEY_WP_SHEET_RESTRICTION);
+
+                    final List<SmartsheetSheet> sheets = getService(values).getAllSheets(sheetRestriction);
+
+                    Collections.sort(sheets, (o1, o2) -> o1.getFullName().compareToIgnoreCase(o2.getFullName()));
                     List<Option> options = new ArrayList<>();
-                    sheets.stream().forEach(sheet -> options.add(new DynamicDropdown.Option(sheet.id, sheet.name)));
+                    sheets.stream().forEach(sheet -> options.add(new DynamicDropdown.Option(sheet.id, sheet.getFullName())));
                     return options;
                 }
             };
@@ -121,11 +125,16 @@ public class SmartsheetWorkPlanIntegration extends WorkPlanIntegration {
                 "Pick Properties to use for Task fields", false));
 
         taskFields.add(createTaskField(SmartsheetConstants.KEY_TMF_TASK_NAME, "LABEL_TMF_TASK_NAME", true, "TEXT_NUMBER"));
-        taskFields.add(createTaskField(SmartsheetConstants.KEY_TMF_TASK_START_DATE, "LABEL_TMF_TASK_START_DATE", false, "DATE"));
-        taskFields.add(createTaskField(SmartsheetConstants.KEY_TMF_TASK_FINISH_DATE, "LABEL_TMF_TASK_FINISH_DATE", false, "DATE"));
+        taskFields.add(createTaskField(SmartsheetConstants.KEY_TMF_TASK_START_DATE, "LABEL_TMF_TASK_START_DATE", false, "DATE", "ABSTRACT_DATETIME"));
+        taskFields.add(createTaskField(SmartsheetConstants.KEY_TMF_TASK_FINISH_DATE, "LABEL_TMF_TASK_FINISH_DATE", false, "DATE", "ABSTRACT_DATETIME"));
         taskFields.add(createTaskField(SmartsheetConstants.KEY_TMF_TASK_RESOURCES, "LABEL_TMF_TASK_RESOURCES", false, "CONTACT_LIST"));
+
+        taskFields.add(new LineBreaker());
+        taskFields.add(new LabelText("", "LABEL_TASK_EFFORT_FIELD_NOTICE", "Effort fields - pick 2", false));
         taskFields.add(createTaskField(SmartsheetConstants.KEY_TMF_TASK_PERCENT_COMPLETE, "LABEL_TMF_TASK_PERCENT_COMPLETE", false, "TEXT_NUMBER"));
         taskFields.add(createTaskField(SmartsheetConstants.KEY_TMF_TASK_ACTUAL_EFFORT, "LABEL_TMF_TASK_ACTUAL_EFFORT", false, "TEXT_NUMBER"));
+        taskFields.add(createTaskField(SmartsheetConstants.KEY_TMF_TASK_SCHEDULED_EFFORT, "LABEL_TMF_TASK_SCHEDULED_EFFORT", false, "TEXT_NUMBER"));
+        taskFields.add(createTaskField(SmartsheetConstants.KEY_TMF_TASK_ERE, "LABEL_TMF_TASK_ERE", false, "TEXT_NUMBER"));
 
         taskFields.add(new LineBreaker());
 

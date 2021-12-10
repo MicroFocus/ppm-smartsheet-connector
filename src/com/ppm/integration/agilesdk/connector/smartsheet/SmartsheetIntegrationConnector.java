@@ -5,23 +5,31 @@
 
 package com.ppm.integration.agilesdk.connector.smartsheet;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
 import com.ppm.integration.agilesdk.FunctionIntegration;
 import com.ppm.integration.agilesdk.IntegrationConnector;
 import com.ppm.integration.agilesdk.ValueSet;
+import com.ppm.integration.agilesdk.connector.smartsheet.model.HomeResponse;
 import com.ppm.integration.agilesdk.connector.smartsheet.model.SmartsheetSheet;
+import com.ppm.integration.agilesdk.connector.smartsheet.service.SmartsheetService;
 import com.ppm.integration.agilesdk.connector.smartsheet.service.SmartsheetServiceProvider;
 import com.ppm.integration.agilesdk.model.AgileProject;
 import com.ppm.integration.agilesdk.ui.*;
+import org.apache.commons.lang.StringUtils;
+import org.apache.log4j.Logger;
 
 /**
  * Main Connector class file for Jira Cloud connector.
  * Note that the Jira Cloud version is purely informative - there is no version for Jira Cloud.
  */
 public class SmartsheetIntegrationConnector extends IntegrationConnector {
+
+    private final Logger logger = Logger.getLogger(SmartsheetIntegrationConnector.class);
 
     @Override
     public String getExternalApplicationName() {
@@ -51,13 +59,48 @@ public class SmartsheetIntegrationConnector extends IntegrationConnector {
                 new LineBreaker(),
                 new LabelText("", "AUTHENTICATION_SETTINGS_SECTION", "block", false),
                 new PasswordText(SmartsheetConstants.KEY_ACCESS_TOKEN, "ACCESS_TOKEN", "", true),
-                new CheckBox(SmartsheetConstants.KEY_FORCE_ACCESS_TOKEN_USE, "LABEL_FORCE_ACCESS_TOKEN_USE", false)
+                new CheckBox(SmartsheetConstants.KEY_FORCE_ACCESS_TOKEN_USE, "LABEL_FORCE_ACCESS_TOKEN_USE", false),
+                new LineBreaker(),
+                new LabelText("", "LABEL_SHEET_RESTRICTION", "Sheet restriction", false),
+                new DynamicDropdown(SmartsheetConstants.KEY_WP_SHEET_RESTRICTION, "WP_SHEET", false) {
+                    @Override
+                    public List<String> getDependencies() {
+                        return Arrays.asList(new String[]{SmartsheetConstants.KEY_ACCESS_TOKEN});
+                    }
+
+                    @Override
+                    public List<Option> getDynamicalOptions(ValueSet values) {
+
+                        List<Option> options = new ArrayList<>();
+
+                        if (!StringUtils.isBlank(values.get(SmartsheetConstants.KEY_ACCESS_TOKEN))) {
+
+                            try {
+
+                                SmartsheetService service = SmartsheetServiceProvider.get(values);
+
+                                List<HomeResponse.Folder> folders = service.getAllFolders();
+                                List<HomeResponse.Workspace> workspaces = service.getAllWorkspaces();
+
+
+                                options.add(new DynamicDropdown.Option("", "N/A"));
+                                workspaces.stream().forEach(workspace -> options.add(new DynamicDropdown.Option(SmartsheetConstants.WORKSPACE_RESTRICTION_PREFIX + workspace.id, "[" + workspace.name + "]")));
+                                folders.stream().forEach(folder -> options.add(new DynamicDropdown.Option(SmartsheetConstants.FOLDER_RESTRICTION_PREFIX + folder.id, folder.getFullName())));
+
+                            } catch (Exception e) {
+                                logger.error(e);
+                            }
+
+                        }
+                        return options;
+                    }
+                }
         });
     }
 
     @Override
     public List<AgileProject> getAgileProjects(ValueSet instanceConfigurationParameters) {
-        List<SmartsheetSheet> sheets = SmartsheetServiceProvider.get(instanceConfigurationParameters).getAllAvailableSheets();
+        List<SmartsheetSheet> sheets = SmartsheetServiceProvider.get(instanceConfigurationParameters).getAllSheets(null);
 
         return sheets.stream().map(sheet -> {
             AgileProject proj = new AgileProject();

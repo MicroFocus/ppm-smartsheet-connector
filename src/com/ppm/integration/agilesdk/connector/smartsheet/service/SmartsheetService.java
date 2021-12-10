@@ -6,7 +6,6 @@ import com.ppm.integration.agilesdk.connector.smartsheet.SmartsheetConstants;
 import com.ppm.integration.agilesdk.connector.smartsheet.model.*;
 import com.ppm.integration.agilesdk.connector.smartsheet.rest.SmartsheetRestClient;
 import com.ppm.integration.agilesdk.connector.smartsheet.rest.SmartsheetRestConfig;
-import org.apache.commons.lang.StringUtils;
 import org.apache.log4j.Logger;
 import org.apache.wink.client.ClientResponse;
 
@@ -30,15 +29,43 @@ public class SmartsheetService {
         this.restClient = restClient;
     }
 
-    public List<SmartsheetSheet> getAllAvailableSheets() {
+    /**
+     *
+     * Returns all sheets, possibly only the ones located in a given folder or workspace.
+     *
+     * We're always retrieving the whole content of /home even when filtered by workspace/folder,
+     * as it's the only way to get all the sheets without looking in all the sub-folders one by one.
+     *
+     * @param sheetRestriction w_workspace_id or f_folder_id or null/empty if you want all sheets.
+     * @return
+     */
+    public List<SmartsheetSheet> getAllSheets(String sheetRestriction) {
 
-        String url = SmartsheetConstants.API_SHEETS + "?includeAll=true";
+        HomeResponse home = getHome();
+
+        List<SmartsheetSheet> sheets = null;
+
+        if (sheetRestriction != null && sheetRestriction.startsWith(SmartsheetConstants.WORKSPACE_RESTRICTION_PREFIX)) {
+            sheets = home.getWorkspaceSheets(sheetRestriction.substring(SmartsheetConstants.WORKSPACE_RESTRICTION_PREFIX.length()));
+        } else if (sheetRestriction != null && sheetRestriction.startsWith(SmartsheetConstants.FOLDER_RESTRICTION_PREFIX)) {
+            sheets = home.getFolderSheets(sheetRestriction.substring(SmartsheetConstants.FOLDER_RESTRICTION_PREFIX.length()));
+        } else {
+            // Get all sheets
+            sheets = home.getAllSheets();
+        }
+
+        return sheets;
+    }
+
+    public HomeResponse getHome() {
+
+        String url = SmartsheetConstants.API_HOME + "?includeAll=true";
 
         ClientResponse response = restClient.sendGet(url);
 
-        SheetSearchResponse responseObject = new Gson().fromJson(response.getEntity(String.class), SheetSearchResponse.class);
+        HomeResponse responseObject = new Gson().fromJson(response.getEntity(String.class), HomeResponse.class);
 
-        return (Arrays.asList(responseObject.data));
+        return responseObject;
     }
 
     /**
@@ -87,4 +114,27 @@ public class SmartsheetService {
             this.basicSheetInfoById.clear();
         }
     }
+
+    public List<HomeResponse.Folder> getAllFolders() {
+
+        List<HomeResponse.Folder> folders = new ArrayList<>();
+
+        HomeResponse home = getHome();
+
+        return home.getAllFolders();
+    }
+
+    public List<HomeResponse.Workspace> getAllWorkspaces() {
+        List<HomeResponse.Workspace> workspaces = new ArrayList<>();
+
+        HomeResponse home = getHome();
+
+        if (home != null && home.workspaces != null) {
+            workspaces.addAll(Arrays.asList(home.workspaces));
+        }
+
+        return workspaces;
+    }
+
+
 }
