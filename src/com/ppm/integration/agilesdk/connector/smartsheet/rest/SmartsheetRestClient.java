@@ -23,7 +23,7 @@ import java.util.UUID;
 
 public class SmartsheetRestClient {
 
-    private boolean ENABLE_REST_CALLS_STATUS_LOG = true;
+    public static final boolean ENABLE_REST_CALLS_STATUS_LOG = false;
 
     private final static Logger logger = LogManager.getLogger(SmartsheetRestClient.class);
 
@@ -35,10 +35,14 @@ public class SmartsheetRestClient {
         this.smartsheetConfig = smartsheetConfig;
         this.clientConfig = smartsheetConfig.getClientConfig();
         this.restClient = new RestClient(clientConfig);
+
+        if (ENABLE_REST_CALLS_STATUS_LOG) {
+            logger.log(LogLevel.STATUS, "creating REST Client with proxy: " + clientConfig.getProxyHost() + ":" + clientConfig.getProxyPort());
+            logger.log(LogLevel.STATUS, "Proxy System Properties: http.proxyHost:" + System.getProperty("http.proxyHost") + "/https.proxyHost:" +  System.getProperty("https.proxyHost") + "java.net.useSystemProxies:" + System.getProperty("java.net.useSystemProxies", System.getenv("java.net.useSystemProxies")));
+        }
     }
 
     /**
-
      * @param includeContentTypeHeader if true, we'll include the JSon "Content-Type" header. If false, we'll not include any Content-type header (to use when using GET or DELETE).
      * @return
      */
@@ -57,7 +61,7 @@ public class SmartsheetRestClient {
                 // This will never happen.
                 throw new RuntimeException("Impossible encoding error occurred", e);
             }
-            resource = restClient.resource(uri).accept(MediaType.APPLICATION_JSON).header("Authorization", "Bearer "+ smartsheetConfig.getAuthToken());
+            resource = restClient.resource(uri).accept(MediaType.APPLICATION_JSON).header("Authorization", "Bearer " + smartsheetConfig.getAuthToken());
 
             // Following header is required for easy HTTP request tracing in systems such as DataPower.
             if (uuid != null) {
@@ -80,22 +84,28 @@ public class SmartsheetRestClient {
     public ClientResponse sendGet(String uri) {
 
         if (ENABLE_REST_CALLS_STATUS_LOG) {
-            logger.log(LogLevel.STATUS, "GET "+uri);
+            logger.log(LogLevel.STATUS, "GET " + uri);
         }
 
-        String uuid = UUID.randomUUID().toString();
-        Resource resource = this.getSmartsheetResource(uri, false, uuid);
-        ClientResponse response = resource.get();
+        try {
 
-        checkResponseStatus(200, response, uri, "GET", null, uuid);
+            String uuid = UUID.randomUUID().toString();
+            Resource resource = this.getSmartsheetResource(uri, false, uuid);
+            ClientResponse response = resource.get();
 
-        return response;
+            checkResponseStatus(200, response, uri, "GET", null, uuid);
+
+            return response;
+        } catch (Exception e) {
+            logger.error("Error when GET " + uri, e);
+            throw new RuntimeException(e);
+        }
     }
 
     private void checkResponseStatus(int expectedHttpStatusCode, ClientResponse response, String uri, String verb, String payload, String uuid) {
 
         if (response.getStatusCode() != expectedHttpStatusCode) {
-            StringBuilder errorMessage = new StringBuilder(String.format("## Unexpected HTTP response status code %s for %s uri %s, expected %s", response.getStatusCode(), verb,  uri, expectedHttpStatusCode));
+            StringBuilder errorMessage = new StringBuilder(String.format("## Unexpected HTTP response status code %s for %s uri %s, expected %s", response.getStatusCode(), verb, uri, expectedHttpStatusCode));
             if (uuid != null) {
                 errorMessage.append(System.lineSeparator()).append("Value of HTTP tracking header X-B3-TraceId:").append(uuid);
             }
@@ -120,25 +130,30 @@ public class SmartsheetRestClient {
     public ClientResponse sendPost(String uri, String jsonPayload, int expectedHttpStatusCode) {
 
         if (ENABLE_REST_CALLS_STATUS_LOG) {
-            logger.log(LogLevel.STATUS, "POST "+uri);
+            logger.log(LogLevel.STATUS, "POST " + uri);
         }
 
-        String uuid = UUID.randomUUID().toString();
-        Resource resource = this.getSmartsheetResource(uri, true, uuid);
-        ClientResponse response = resource.post(jsonPayload);
-        checkResponseStatus(expectedHttpStatusCode, response, uri, "POST", jsonPayload, uuid);
+        try {
+            String uuid = UUID.randomUUID().toString();
+            Resource resource = this.getSmartsheetResource(uri, true, uuid);
+            ClientResponse response = resource.post(jsonPayload);
+            checkResponseStatus(expectedHttpStatusCode, response, uri, "POST", jsonPayload, uuid);
 
-        return response;
+            return response;
+        } catch (Exception e) {
+            logger.error("Error when POST " + uri, e);
+            throw new RuntimeException(e);
+        }
     }
 
     public ClientResponse sendPut(String uri, String jsonPayload, int expectedHttpStatusCode) {
 
         if (ENABLE_REST_CALLS_STATUS_LOG) {
-            logger.log(LogLevel.STATUS, "PUT "+uri);
+            logger.log(LogLevel.STATUS, "PUT " + uri);
         }
 
         String uuid = UUID.randomUUID().toString();
-        Resource resource = this.getSmartsheetResource(uri,true, uuid);
+        Resource resource = this.getSmartsheetResource(uri, true, uuid);
         ClientResponse response = resource.put(jsonPayload);
 
         checkResponseStatus(expectedHttpStatusCode, response, uri, "PUT", jsonPayload, uuid);
